@@ -20,10 +20,11 @@ const RecordRate = require('../../../lib/worker/rate-control/recordRate');
 const TestMessage = require('../../../lib/common/messages/testMessage');
 const MockRate = require('./mockRate');
 const TransactionStatisticsCollector = require('../../../lib/common/core/transaction-statistics-collector');
-
+const fs = require('fs');
 const chai = require('chai');
 chai.should();
 const sinon = require('sinon');
+const expect = chai.expect;
 
 describe('RecordRate controller', () => {
     before(() => {
@@ -100,5 +101,45 @@ describe('RecordRate controller', () => {
         (() => {
             RecordRate.createRateController(testMessage, stubStatsCollector, 0)
         }).should.throw(/Module "nonexistent-rate" could not be loaded/);
+    });
+    
+    describe('#_exportToText Test', () => {
+        it('should export recorded results in text format', async () => {
+            const testMessage = new TestMessage('test', [], {
+                label: 'test',
+                rateControl: {
+                    "type": "record-rate",
+                    "opts": {
+                        "rateController": {
+                            "type": "zero-rate"
+                        },
+                        "pathTemplate": "../tx_records_client<C>_round<R>.txt",
+                        "outputFormat": "TEXT",
+                        "logEnd": true
+                    }
+                },
+                workload: {
+                    module: 'module.js'
+                },
+                testRound: 0,
+                txDuration: 250,
+                totalWorkers: 2
+            });
+            const stats = sinon.createStubInstance(TransactionStatisticsCollector);
+            const controller = new RecordRate.createRateController(testMessage, stats, 0);
+            controller.records = [100, 200, 300, 400, 500];
+            controller._exportToText();
+
+            const filePath = '../tx_records_client0_round0.txt'; 
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+
+            const lines = fileContent.trim().split('\n');
+            expect(lines.length).to.equal(5);
+            lines.forEach((line, index) => {
+                expect(parseInt(line)).to.equal((index + 1) * 100);
+            });
+    
+            fs.unlinkSync(filePath);
+        });
     });
 });
